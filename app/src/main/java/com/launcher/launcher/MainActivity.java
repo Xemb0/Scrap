@@ -1,127 +1,106 @@
 package com.launcher.launcher;
-import androidx.annotation.NonNull;
+
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+
+import android.annotation.SuppressLint;
 import android.content.Context;
-import android.os.Build;
-import android.os.Bundle;
-import android.view.GestureDetector;
-import android.view.MotionEvent;
-import android.view.View;
-import android.widget.TextView;
-import android.widget.Toast;
 import android.content.Intent;
-import android.Manifest;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.os.Build;
-//import android.support.v4.content.ContextCompat;
-import android.util.Log;
-import android.widget.Toast;
-import java.lang.reflect.Method;
+import android.graphics.drawable.Drawable;
+import android.os.Bundle;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageView;
+import android.widget.TextView;
 
+import java.util.ArrayList;
+import java.util.List;
 
-import com.launcher.launcher.R;
-
-import java.lang.reflect.Method;
-
-public class MainActivity extends AppCompatActivity implements GestureDetector.OnGestureListener {
-
-    private GestureDetector gestureDetector;
-    private TextView instructions;
-    private View decorView;
+public class MainActivity extends AppCompatActivity {
+    private TextView textView;
+    private RecyclerView recyclerView;
+    private List<ApplicationInfo> applicationInfoList;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        instructions = findViewById(R.id.instructions);
-        decorView = getWindow().getDecorView();
+        textView = findViewById(R.id.textView);
+        recyclerView = findViewById(R.id.recyclerView);
+        applicationInfoList = new ArrayList<>();
 
-        gestureDetector = new GestureDetector(this, this);
+        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        recyclerView.setAdapter(new AppAdapter(this, applicationInfoList));
+
+        updateAppList();
     }
 
-    @Override
-    public boolean onTouchEvent(MotionEvent event) {
-        gestureDetector.onTouchEvent(event);
-        return super.onTouchEvent(event);
-    }
-
-    @Override
-    public boolean onDown(MotionEvent e) {
-        return true;
-    }
-    private void GetPermissions(){
-        if(ContextCompat.checkSelfPermission(this, Manifest.permission.EXPAND_STATUS_BAR) != PackageManager.PERMISSION_GRANTED){
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.EXPAND_STATUS_BAR}, 1);
+    @SuppressLint("SetTextI18n")
+    private void updateAppList() {
+        PackageManager packageManager = getPackageManager();
+        List<ApplicationInfo> allApps = packageManager.getInstalledApplications(PackageManager.GET_META_DATA);
+        int numApps = 0;
+        for (ApplicationInfo appInfo : allApps) {
+            if ((appInfo.flags & ApplicationInfo.FLAG_SYSTEM) == 0) {
+                applicationInfoList.add(appInfo);
+                numApps++;
+            }
         }
+        textView.setText(numApps + " Apps are installed");
+        recyclerView.getAdapter().notifyDataSetChanged();
     }
 
-    @Override
+    private static class AppAdapter extends RecyclerView.Adapter<AppAdapter.AppViewHolder> {
+        private final Context context;
+        private final List<ApplicationInfo> applicationInfoList;
+        private final PackageManager packageManager;
 
-    //permisson for notification
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-
-        if (requestCode == 1) {
-            if (grantResults.length == 0 || grantResults[0] != PackageManager.PERMISSION_GRANTED)
-                Toast.makeText(getApplicationContext(), "Permission Denied", Toast.LENGTH_SHORT).show();
+        public AppAdapter(Context context, List<ApplicationInfo> applicationInfoList) {
+            this.context = context;
+            this.applicationInfoList = applicationInfoList;
+            this.packageManager = context.getPackageManager();
         }
-    }
 
-    private void ExpandNotificationBar(){
-        if(ContextCompat.checkSelfPermission(this, Manifest.permission.EXPAND_STATUS_BAR) != PackageManager.PERMISSION_GRANTED)
-            return;
-
-        try{
-            Object service = getSystemService("statusbar");
-            Class<?> statusbarManager = Class.forName("android.app.StatusBarManager");
-            Method expand = statusbarManager.getMethod("expandNotificationsPanel"); //<-
-            expand.invoke(service);
+        @Override
+        public AppViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+            View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.app_list_item, parent, false);
+            return new AppViewHolder(view);
         }
-        catch (Exception e){
-            Log.e("StatusBar", e.toString());
-            Toast.makeText(getApplicationContext(), "Expansion Not Working", Toast.LENGTH_SHORT).show();
+
+        @Override
+        public void onBindViewHolder(AppViewHolder holder, int position) {
+            ApplicationInfo appInfo = applicationInfoList.get(position);
+            CharSequence appName = packageManager.getApplicationLabel(appInfo);
+            holder.textView.setText(appName != null ? appName.toString() : appInfo.packageName);
+            holder.imageView.setImageDrawable(packageManager.getApplicationIcon(appInfo));
+            holder.itemView.setOnClickListener(view -> {
+                String packageName = applicationInfoList.get(position).packageName;
+                Intent launchIntent = packageManager.getLaunchIntentForPackage(packageName);
+                if (launchIntent != null) {
+                    context.startActivity(launchIntent);
+                }
+            });
         }
-    }
-    @Override
-    public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
-        if (e1.getY() < e2.getY()) {
-            // The user has swiped down
-            ExpandNotificationBar();
-        } else if (e1.getY() > e2.getY()) {
-            // The user has swiped up
-            Intent notificationIntent = new Intent(Intent.ACTION_VIEW);
-            notificationIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-            notificationIntent.putExtra("app_package", getPackageName());
-            notificationIntent.putExtra("app_uid", getApplicationInfo().uid);
-            startActivity(notificationIntent);
-        } else if (e1.getX() < e2.getX()) {
-            // The user has swiped left
-            Toast.makeText(MainActivity.this, "Hello, World! (left)", Toast.LENGTH_SHORT).show();
-        } else if (e1.getX() > e2.getX()) {
-            // The user has swiped right
-            Toast.makeText(MainActivity.this, "Hello, World! (right)", Toast.LENGTH_SHORT).show();
+
+        @Override
+        public int getItemCount() {
+            return applicationInfoList.size();
         }
-        return true;
-    }
 
-    @Override
-    public void onLongPress(MotionEvent e) {
-    }
+        public static class AppViewHolder extends RecyclerView.ViewHolder {
+            public ImageView imageView;
+            public TextView textView;
 
-    @Override
-    public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
-        return false;
-    }
-
-    @Override
-    public void onShowPress(MotionEvent e) {
-    }
-
-    @Override
-    public boolean onSingleTapUp(MotionEvent e) {
-        return false;
+            public AppViewHolder(View itemView) {
+                super(itemView);
+                imageView = itemView.findViewById(R.id.app_icon);
+                textView = itemView.findViewById(R.id.app_name);
+            }
+        }
     }
 }
