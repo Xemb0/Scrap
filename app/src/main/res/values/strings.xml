@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">launcher</string>
+    <string name="swipe_up_to_say_hello">Swipe up to say hello!</string>
+</resources>
